@@ -154,7 +154,13 @@ export function createConvoyGame(parent: HTMLElement): ConvoyGameHandle {
     game,
     setState(state) {
       queuedState = state;
-      activeScene?.setState(state);
+      if (state) {
+        parent.dataset.position = String(state.convoy.position);
+        parent.dataset.cargo = String(state.convoy.cargoUnits);
+        parent.dataset.credits = String(state.convoy.credits);
+        parent.dataset.objective = String(state.convoy.objectiveProgress);
+        activeScene?.setState(state);
+      }
     },
     destroy() {
       queuedState = null;

@@ -21,11 +21,15 @@ Playwright starts one local server and Vite, then opens independent Lead and Esc
 
 1. both clients converge to one tick, sequence, and state hash;
 2. Escort runs under `150 ms latency / 5% drop` during role commands;
-3. Lead movement and Escort scan/transfer are server-confirmed;
-4. resending the same command is rejected without changing the receipt;
-5. Lead disconnects and recovers with its private token;
-6. a 390 x 844 late client joins as Observer and receives the current snapshot;
-7. all three clients end with the same receipt and no browser console errors.
+3. one snapshot is deterministically dropped, the drop counter increases, and a later full snapshot restores convergence;
+4. route position, objective progress, cargo, and credits match the requested command semantics;
+5. WebGL pixel sampling confirms the Phaser canvas is not a blank frame;
+6. resending the same command is rejected without changing the receipt;
+7. Lead disconnects, recovers with its private token, and successfully sends another command;
+8. a 390 x 844 late client joins as Observer and receives the current snapshot;
+9. all three clients end with the same receipt and no browser console errors.
+
+The suite starts fresh server processes by default. The JSON receipt records the tested Git commit; local developers may explicitly opt into server reuse with `PW_REUSE_SERVER=1`.
 
 The run writes ignored local evidence to `evidence/browser/`:
 

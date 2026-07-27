@@ -11,6 +11,7 @@ Lead は船団を前進させ、Escort は索敵と貨物移送を担当しま�
 - late join が完全な snapshot を取得できる
 - reconnect token を公開 snapshot に漏らさず、30 秒の lease 内で役割を復元できる
 - `150 ms latency / 5% drop` 下でも client が server tick・snapshot sequence・state hash へ収束できる
+- snapshot を 1 回確実に drop し、次の full snapshot で欠落状態から回復できる
 
 ## ローカル起動
 

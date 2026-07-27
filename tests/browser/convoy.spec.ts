@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test, type BrowserContext, type Page } from "playwright/test";
@@ -6,6 +7,13 @@ interface SyncReceipt {
   serverTick: number;
   snapshotSequence: number;
   stateHash: string;
+}
+
+interface ConvoyReceipt {
+  position: number;
+  cargo: number;
+  credits: number;
+  objective: number;
 }
 
 const evidenceDir = resolve(process.cwd(), "evidence", "browser");
@@ -49,6 +57,46 @@ async function waitForConvergence(pages: Page[], previousHash?: string): Promise
   return readSync(pages[0]);
 }
 
+async function waitForChange(page: Page, previousHash: string): Promise<SyncReceipt> {
+  await expect.poll(() => metric(page, "state-hash")).not.toBe(previousHash);
+  return readSync(page);
+}
+
+async function readConvoy(page: Page): Promise<ConvoyReceipt> {
+  const playfield = page.getByTestId("convoy-playfield");
+  const [position, cargo, credits, objective] = await Promise.all([
+    playfield.getAttribute("data-position"),
+    playfield.getAttribute("data-cargo"),
+    playfield.getAttribute("data-credits"),
+    playfield.getAttribute("data-objective"),
+  ]);
+  return { position: Number(position), cargo: Number(cargo), credits: Number(credits), objective: Number(objective) };
+}
+
+async function expectNonblankCanvas(page: Page): Promise<void> {
+  const stats = await page.getByTestId("convoy-playfield").locator("canvas").evaluate(async (canvas: HTMLCanvasElement) => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    if (!gl) return { opaque: 0, colors: 0 };
+    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const colors = new Set<string>();
+    let opaque = 0;
+    for (let index = 0; index < pixels.length; index += 64) {
+      if (pixels[index + 3] > 0) opaque += 1;
+      colors.add(`${pixels[index]}-${pixels[index + 1]}-${pixels[index + 2]}`);
+    }
+    return { opaque, colors: colors.size };
+  });
+  expect(stats.opaque).toBeGreaterThan(100);
+  expect(stats.colors).toBeGreaterThan(4);
+}
+
+async function droppedCount(page: Page): Promise<number> {
+  const summary = await metric(page, "transport-metrics");
+  return Number(/dropped (\d+)/.exec(summary)?.[1] ?? 0);
+}
+
 async function setFault(page: Page, key: "latencyMs" | "dropRate", value: number): Promise<void> {
   const input = page.getByTestId(`fault-${key}`);
   await input.evaluate((element, nextValue) => {
@@ -69,6 +117,7 @@ function watchBrowserErrors(page: Page, errors: string[]): void {
 test("two clients converge through authoritative actions, duplicate rejection, reconnect, and late join", async ({ browser, baseURL }) => {
   const roomId = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const acceptanceFaultProfile = { latencyMs: 150, dropRate: 0.05 };
+  const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   const browserErrors: string[] = [];
   const contexts: BrowserContext[] = [];
   await mkdir(evidenceDir, { recursive: true });
@@ -87,23 +136,39 @@ test("two clients converge through authoritative actions, duplicate rejection, r
       escort.goto(`${baseURL}/?room=${roomId}&role=escort`),
     ]);
     await Promise.all([waitForRole(lead, "LEAD"), waitForRole(escort, "ESCORT")]);
+    await Promise.all([expectNonblankCanvas(lead), expectNonblankCanvas(escort)]);
 
     const initial = await waitForConvergence([lead, escort]);
+    expect(await readConvoy(lead)).toEqual({ position: 0, cargo: 100, credits: 0, objective: 0 });
     await setFault(escort, "latencyMs", acceptanceFaultProfile.latencyMs);
     await setFault(escort, "dropRate", acceptanceFaultProfile.dropRate);
 
     await lead.getByTestId("action-advance-3").click();
     const afterLeadAction = await waitForConvergence([lead, escort], initial.stateHash);
     expect(afterLeadAction.serverTick).toBeGreaterThan(initial.serverTick);
+    expect((await readConvoy(lead)).position).toBe(3);
+    expect((await readConvoy(escort)).position).toBe(3);
 
     await escort.getByTestId("action-scan-sector").click();
     const afterEscortAction = await waitForConvergence([lead, escort], afterLeadAction.stateHash);
     expect(afterEscortAction.serverTick).toBeGreaterThan(afterLeadAction.serverTick);
+    expect((await readConvoy(lead)).objective).toBe(2);
+
+    await setFault(escort, "dropRate", 1);
+    await lead.getByTestId("action-advance-1").click();
+    const afterForcedLoss = await waitForChange(lead, afterEscortAction.stateHash);
+    await expect.poll(() => droppedCount(escort)).toBeGreaterThan(0);
+    expect(await readSync(escort)).toEqual(afterEscortAction);
 
     await setFault(escort, "dropRate", 0);
+    await lead.getByTestId("action-advance-1").click();
+    const afterLossRecovery = await waitForConvergence([lead, escort], afterForcedLoss.stateHash);
+    expect((await readConvoy(escort)).position).toBe(5);
+
     await escort.getByTestId("action-transfer-10u").click();
-    const beforeDuplicate = await waitForConvergence([lead, escort], afterEscortAction.stateHash);
+    const beforeDuplicate = await waitForConvergence([lead, escort], afterLossRecovery.stateHash);
     await expect(escort.getByTestId("acked-commands")).toHaveText("2");
+    expect(await readConvoy(escort)).toEqual({ position: 5, cargo: 90, credits: 20, objective: 4 });
 
     await escort.getByTestId("resend-button").click();
     await expect(escort.getByTestId("last-reject")).toHaveText("Last rejection: duplicate-command");
@@ -118,6 +183,9 @@ test("two clients converge through authoritative actions, duplicate rejection, r
     await waitForRole(lead, "LEAD");
     await expect(lead.getByTestId("recovery-ms")).not.toHaveText("-");
     const afterReconnect = await waitForConvergence([lead, escort]);
+    await lead.getByTestId("action-advance-1").click();
+    const afterReconnectCommand = await waitForConvergence([lead, escort], afterReconnect.stateHash);
+    expect((await readConvoy(lead)).position).toBe(6);
 
     const lateContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     contexts.push(lateContext);
@@ -125,8 +193,10 @@ test("two clients converge through authoritative actions, duplicate rejection, r
     watchBrowserErrors(lateObserver, browserErrors);
     await lateObserver.goto(`${baseURL}/?room=${roomId}&role=lead`);
     await waitForRole(lateObserver, "OBSERVER");
+    await expectNonblankCanvas(lateObserver);
     const afterLateJoin = await waitForConvergence([lead, escort, lateObserver]);
-    expect(afterLateJoin).toEqual(afterReconnect);
+    expect(afterLateJoin).toEqual(afterReconnectCommand);
+    expect((await readConvoy(lateObserver)).position).toBe(6);
     await expect(lateObserver.getByTestId("action-advance-3")).toBeDisabled();
 
     const desktopScreenshot = resolve(evidenceDir, "desktop-convoy.png");
@@ -136,6 +206,7 @@ test("two clients converge through authoritative actions, duplicate rejection, r
 
     const receipt = {
       capturedAt: new Date().toISOString(),
+      commit,
       roomId,
       clients: {
         lead: { role: await metric(lead, "assigned-role"), ...await readSync(lead), recovery: await metric(lead, "recovery-ms") },
@@ -146,9 +217,12 @@ test("two clients converge through authoritative actions, duplicate rejection, r
         initial,
         afterLeadAction,
         afterEscortAction,
+        afterForcedLoss,
+        afterLossRecovery,
         beforeDuplicate,
         afterDuplicate,
         afterReconnect,
+        afterReconnectCommand,
         afterLateJoin,
       },
       duplicateCommand: {
@@ -158,7 +232,9 @@ test("two clients converge through authoritative actions, duplicate rejection, r
       },
       faultProfile: {
         exercised: acceptanceFaultProfile,
+        forcedDropRate: 1,
         finalDropRate: await escort.getByTestId("fault-dropRate").inputValue(),
+        dropped: await droppedCount(escort),
         transport: await metric(escort, "transport-metrics"),
       },
       screenshots: ["evidence/browser/desktop-convoy.png", "evidence/browser/mobile-late-join.png"],

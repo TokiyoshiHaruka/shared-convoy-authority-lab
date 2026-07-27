@@ -1,15 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
 const failures = [];
 const generatedPrefixes = ["node_modules/", "dist/", "evidence/", "test-results/", "playwright-report/", "coverage/"];
-const textExtensions = new Set([".css", ".html", ".js", ".json", ".md", ".mjs", ".ts", ".tsx", ".yml", ".yaml"]);
 const secretPatterns = [
-  /BEGIN (?:RSA|OPENSSH|EC) PRIVATE KEY/,
+  /BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY/,
   /AKIA[0-9A-Z]{16}/,
   /ghp_[A-Za-z0-9]{20,}/,
   /github_pat_[A-Za-z0-9_]{20,}/,
@@ -18,14 +17,18 @@ const secretPatterns = [
 const absoluteLocalPath = /(?:^|[^A-Za-z0-9])[A-Za-z]:[\\/](?!\\)/m;
 const unsafeHtml = /\b(?:innerHTML|outerHTML|insertAdjacentHTML|dangerouslySetInnerHTML)\b/;
 const endpointPattern = /\b(?:https?|wss?):\/\/([A-Za-z0-9.-]+)(?::\d+)?/gi;
+let scanned = 0;
 
 for (const path of files) {
-  if (generatedPrefixes.some((prefix) => path.startsWith(prefix)) || path === ".env" || path.startsWith(".env.")) {
+  const name = basename(path);
+  if (generatedPrefixes.some((prefix) => path.startsWith(prefix)) || name === ".env" || name.startsWith(".env.")) {
     failures.push(`tracked-generated-or-env:${path}`);
     continue;
   }
-  if (!textExtensions.has(extname(path)) || path === "package-lock.json") continue;
+  if (/\.(?:key|p12|pem|pfx)$/i.test(name)) failures.push(`tracked-key-material:${path}`);
+  if ((await stat(join(root, path))).size > 1_000_000) continue;
   const text = await readFile(join(root, path), "utf8");
+  scanned += 1;
   for (const pattern of secretPatterns) if (pattern.test(text)) failures.push(`possible-secret:${path}`);
   if (path !== "scripts/check_repo.mjs" && absoluteLocalPath.test(text)) failures.push(`absolute-local-path:${path}`);
   if (path.startsWith("src/") && unsafeHtml.test(text)) failures.push(`unsafe-html-sink:${path}`);
@@ -41,4 +44,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`repository hygiene: OK (${files.length} source files scanned)`);
+console.log(`repository hygiene: OK (${scanned} text files scanned)`);

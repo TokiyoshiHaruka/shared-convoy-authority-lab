@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "playwright/test";
 
+const reuseExistingServer = process.env.PW_REUSE_SERVER === "1";
+
 export default defineConfig({
   testDir: "./tests/browser",
   fullyParallel: false,
@@ -24,13 +26,13 @@ export default defineConfig({
     {
       command: "npm run server",
       port: 8787,
-      reuseExistingServer: true,
+      reuseExistingServer,
       timeout: 20_000,
     },
     {
       command: "npm run dev",
       url: "http://127.0.0.1:4173",
-      reuseExistingServer: true,
+      reuseExistingServer,
       timeout: 20_000,
     },
   ],
