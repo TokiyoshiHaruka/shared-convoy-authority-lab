@@ -165,8 +165,7 @@ export class ConvoyHud {
     debugContent.append(this.createFaultControl("reorderRate", "Reorder", 0, 1, 0.01, "%", true));
     debug.append(debugSummary, debugContent);
 
-    const footer = createElement("p", "hud-footnote", "Commands are proposals. The server snapshot is the only accepted state.");
-    shell.append(header, connectionBar, playfield, actionPanel, observability, debug, footer);
+    shell.append(header, connectionBar, playfield, actionPanel, observability, debug);
     this.root.append(shell);
     this.connectButton.addEventListener("click", () => actions.connect());
     this.disconnectButton.addEventListener("click", () => actions.disconnect());
@@ -198,7 +197,7 @@ export class ConvoyHud {
     this.rejectedValue.textContent = String(metrics.rejectedCommands);
     this.recoveryValue.textContent = metrics.recoveryMs === null ? "-" : `${metrics.recoveryMs} ms`;
     this.hashValue.textContent = metrics.stateHash;
-    this.transportValue.textContent = `Transport  sent ${metrics.transport.sent}  |  delivered ${metrics.transport.delivered}  |  dropped ${metrics.transport.dropped}  |  duplicated ${metrics.transport.duplicated}  |  reordered ${metrics.transport.reordered}`;
+    this.transportValue.textContent = `Transport  sent ${metrics.transport.sent}  |  received ${metrics.transport.received}  |  delivered ${metrics.transport.delivered}  |  dropped ${metrics.transport.dropped}  |  duplicated ${metrics.transport.duplicated}  |  reordered ${metrics.transport.reordered}`;
     this.lastRejectValue.textContent = metrics.lastRejectReason ? `Last rejection: ${metrics.lastRejectReason}` : "No rejected commands";
     this.setButtonStates(metrics.status, metrics.assignedRole);
     for (const [key, input] of this.faultInputs) {

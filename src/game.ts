@@ -83,17 +83,17 @@ export class ConvoyScene extends Phaser.Scene {
     const objectiveProgress = clamp((state?.convoy.objectiveProgress ?? 0) / ROUTE_TARGET, 0, 1);
 
     this.graphics.clear();
-    this.graphics.fillStyle(0x0e171f, 1);
+    this.graphics.fillStyle(0x101416, 1);
     this.graphics.fillRect(0, 0, width, height);
-    this.graphics.lineStyle(1, 0x263845, 1);
+    this.graphics.lineStyle(1, 0x292f31, 1);
     for (let line = 0; line < 6; line += 1) {
       const y = 36 + line * 34;
       this.graphics.lineBetween(0, y, width, y);
     }
 
-    this.graphics.lineStyle(8, 0x25343f, 1);
+    this.graphics.lineStyle(8, 0x363c3e, 1);
     this.graphics.lineBetween(routeStart, routeY, routeEnd, routeY);
-    this.graphics.lineStyle(2, 0x687a85, 1);
+    this.graphics.lineStyle(2, 0x858d8e, 1);
     this.graphics.lineBetween(routeStart, routeY, routeEnd, routeY);
     for (let marker = 0; marker <= ROUTE_TARGET; marker += 1) {
       const x = routeStart + routeWidth * (marker / ROUTE_TARGET);
@@ -102,7 +102,7 @@ export class ConvoyScene extends Phaser.Scene {
     }
 
     const objectiveX = routeStart + routeWidth;
-    this.graphics.fillStyle(0x22313b, 1);
+    this.graphics.fillStyle(0x262b2d, 1);
     this.graphics.fillCircle(objectiveX, routeY, 24);
     this.graphics.lineStyle(3, objectiveProgress >= 1 ? 0x7ce3a6 : 0xe2a93d, 1);
     this.graphics.strokeCircle(objectiveX, routeY, 24);
@@ -123,7 +123,7 @@ export class ConvoyScene extends Phaser.Scene {
   private drawShip(x: number, y: number, color: number, role: "lead" | "escort"): void {
     this.graphics.fillStyle(color, 1);
     this.graphics.fillRoundedRect(x - 19, y - 9, 38, 18, 5);
-    this.graphics.fillStyle(0x0e171f, 1);
+    this.graphics.fillStyle(0x101416, 1);
     this.graphics.fillTriangle(x + 19, y - 8, x + 29, y, x + 19, y + 8);
     this.graphics.fillCircle(x - 7, y, role === "lead" ? 4 : 3);
   }
@@ -141,7 +141,7 @@ export function createConvoyGame(parent: HTMLElement): ConvoyGameHandle {
     parent,
     width: 920,
     height: 430,
-    backgroundColor: "#0e171f",
+    backgroundColor: "#101416",
     scene: [ConvoyScene],
     scale: {
       mode: Phaser.Scale.RESIZE,
