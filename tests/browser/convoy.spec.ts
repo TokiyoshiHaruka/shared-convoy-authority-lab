@@ -49,6 +49,16 @@ async function waitForConvergence(pages: Page[], previousHash?: string): Promise
   return readSync(pages[0]);
 }
 
+async function setFault(page: Page, key: "latencyMs" | "dropRate", value: number): Promise<void> {
+  const input = page.getByTestId(`fault-${key}`);
+  await input.evaluate((element, nextValue) => {
+    const slider = element as HTMLInputElement;
+    slider.value = String(nextValue);
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  }, value);
+  await expect(input).toHaveValue(String(value));
+}
+
 function watchBrowserErrors(page: Page, errors: string[]): void {
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -58,6 +68,7 @@ function watchBrowserErrors(page: Page, errors: string[]): void {
 
 test("two clients converge through authoritative actions, duplicate rejection, reconnect, and late join", async ({ browser, baseURL }) => {
   const roomId = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const acceptanceFaultProfile = { latencyMs: 150, dropRate: 0.05 };
   const browserErrors: string[] = [];
   const contexts: BrowserContext[] = [];
   await mkdir(evidenceDir, { recursive: true });
@@ -78,6 +89,8 @@ test("two clients converge through authoritative actions, duplicate rejection, r
     await Promise.all([waitForRole(lead, "LEAD"), waitForRole(escort, "ESCORT")]);
 
     const initial = await waitForConvergence([lead, escort]);
+    await setFault(escort, "latencyMs", acceptanceFaultProfile.latencyMs);
+    await setFault(escort, "dropRate", acceptanceFaultProfile.dropRate);
 
     await lead.getByTestId("action-advance-3").click();
     const afterLeadAction = await waitForConvergence([lead, escort], initial.stateHash);
@@ -87,6 +100,7 @@ test("two clients converge through authoritative actions, duplicate rejection, r
     const afterEscortAction = await waitForConvergence([lead, escort], afterLeadAction.stateHash);
     expect(afterEscortAction.serverTick).toBeGreaterThan(afterLeadAction.serverTick);
 
+    await setFault(escort, "dropRate", 0);
     await escort.getByTestId("action-transfer-10u").click();
     const beforeDuplicate = await waitForConvergence([lead, escort], afterEscortAction.stateHash);
     await expect(escort.getByTestId("acked-commands")).toHaveText("2");
@@ -141,6 +155,11 @@ test("two clients converge through authoritative actions, duplicate rejection, r
         rejected: await metric(escort, "rejected-commands"),
         reason: await metric(escort, "last-reject"),
         stateUnchanged: JSON.stringify(afterDuplicate) === JSON.stringify(beforeDuplicate),
+      },
+      faultProfile: {
+        exercised: acceptanceFaultProfile,
+        finalDropRate: await escort.getByTestId("fault-dropRate").inputValue(),
+        transport: await metric(escort, "transport-metrics"),
       },
       screenshots: ["evidence/browser/desktop-convoy.png", "evidence/browser/mobile-late-join.png"],
       browserErrors,
