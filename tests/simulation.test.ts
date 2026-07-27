@@ -3,6 +3,7 @@ import {
   applyCommand,
   createRoom,
   hashRoom,
+  setRoleConnected,
   type RoomState,
 } from "../src/simulation";
 
@@ -21,7 +22,7 @@ describe("createRoom", () => {
       credits: 0,
       objectiveProgress: 0,
     });
-    expect(room.connectedRoles).toEqual({ lead: null, escort: null });
+    expect(room.connectedRoles).toEqual({ lead: false, escort: false });
   });
 });
 
@@ -84,5 +85,20 @@ describe("authoritative command application", () => {
     const first = createRoom("room-alpha");
     const second = createRoom("room-alpha");
     expect(hashRoom(first)).toBe(hashRoom(second));
+  });
+
+  it("includes role ownership and sequence cursors in the receipt hash", () => {
+    const first = createRoom("room-alpha");
+    const second = createRoom("room-alpha");
+    second.connectedRoles.lead = true;
+    second.lastClientSequences.lead = 1;
+    expect(hashRoom(first)).not.toBe(hashRoom(second));
+  });
+
+  it("versions public role presence without exposing reconnect credentials", () => {
+    const connected = setRoleConnected(createRoom("room-alpha"), "lead", true);
+    expect(connected.connectedRoles.lead).toBe(true);
+    expect(connected.serverTick).toBe(1);
+    expect(connected.snapshotSequence).toBe(1);
   });
 });

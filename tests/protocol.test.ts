@@ -22,5 +22,8 @@ describe("client protocol validation", () => {
     expect(() => parseClientMessage(JSON.stringify({
       type: "command", commandId: "bad", clientSequence: 1, role: "lead", state: { credits: 999 }, action: { type: "scan" },
     }))).toThrow("invalid-command");
+    expect(() => parseClientMessage(JSON.stringify({
+      type: "command", commandId: "huge", clientSequence: Number.MAX_SAFE_INTEGER + 2, role: "lead", action: { type: "move", distance: 1 },
+    }))).toThrow("invalid-command");
   });
 });

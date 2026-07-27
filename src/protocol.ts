@@ -15,7 +15,7 @@ export interface ClientCommand {
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
-const isInteger = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value);
+const isInteger = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value);
 
 export function parseClientMessage(input: string): ClientCommand {
   let value: unknown;

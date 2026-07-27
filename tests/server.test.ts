@@ -40,7 +40,36 @@ describe("authoritative convoy server", () => {
 
     const reconnected = await harness.connectClient("room-charlie", "lead", token);
     expect(reconnected.messages.some((message) => message.type === "snapshot" && message.state.convoy.position === 1)).toBe(true);
-    expect(harness.getRoom("room-charlie").connectedRoles.lead).toBe(reconnected.sessionToken);
+    expect(harness.getRoom("room-charlie").connectedRoles.lead).toBe(true);
+    await harness.close();
+  });
+
+  it("does not allow an old socket to keep using a replaced reconnect token", async () => {
+    harness = await createServerHarness({ port: 0 });
+    const lead = await harness.connectClient("room-delta", "lead");
+    const replacement = await harness.connectClient("room-delta", "lead", lead.sessionToken);
+    await expect(lead.send({ type: "command", commandId: "old-1", clientSequence: 1, role: "lead", action: { type: "move", distance: 1 } })).rejects.toThrow();
+    await replacement.send({ type: "command", commandId: "new-1", clientSequence: 1, role: "lead", action: { type: "move", distance: 1 } });
+    expect(harness.getRoom("room-delta").convoy.position).toBe(1);
+    await harness.close();
+  });
+
+  it("keeps reconnect credentials out of public snapshots", async () => {
+    harness = await createServerHarness({ port: 0 });
+    const lead = await harness.connectClient("room-echo", "lead");
+    const observer = await harness.connectClient("room-echo", "observer");
+    const snapshots = observer.messages.filter((message) => message.type === "snapshot");
+    expect(snapshots.length).toBeGreaterThan(0);
+    expect(JSON.stringify(snapshots)).not.toContain(lead.sessionToken);
+    expect(harness.getRoom("room-echo").connectedRoles.lead).toBe(true);
+    await harness.close();
+  });
+
+  it("correlates an invalid command rejection with its safe command id", async () => {
+    harness = await createServerHarness({ port: 0 });
+    const lead = await harness.connectClient("room-foxtrot", "lead");
+    await lead.send({ type: "command", commandId: "bad-action", clientSequence: 1, role: "lead", action: { type: "move", distance: 99 } });
+    expect(lead.messages.some((message) => message.type === "reject" && message.commandId === "bad-action" && message.reason === "invalid-command")).toBe(true);
     await harness.close();
   });
 });

@@ -14,7 +14,7 @@ export interface RoomState {
   serverTick: number;
   snapshotSequence: number;
   convoy: ConvoyState;
-  connectedRoles: Record<Role, string | null>;
+  connectedRoles: Record<Role, boolean>;
   processedCommandIds: string[];
   lastClientSequences: Record<Role, number>;
 }
@@ -42,9 +42,19 @@ export function createRoom(roomId: string): RoomState {
       credits: 0,
       objectiveProgress: 0,
     },
-    connectedRoles: { lead: null, escort: null },
+    connectedRoles: { lead: false, escort: false },
     processedCommandIds: [],
     lastClientSequences: { lead: 0, escort: 0 },
+  };
+}
+
+export function setRoleConnected(state: RoomState, role: Role, connected: boolean): RoomState {
+  if (state.connectedRoles[role] === connected) return state;
+  return {
+    ...state,
+    serverTick: state.serverTick + 1,
+    snapshotSequence: state.snapshotSequence + 1,
+    connectedRoles: { ...state.connectedRoles, [role]: connected },
   };
 }
 
@@ -100,6 +110,8 @@ export function hashRoom(state: RoomState): string {
     serverTick: state.serverTick,
     snapshotSequence: state.snapshotSequence,
     convoy: state.convoy,
+    connectedRoles: state.connectedRoles,
+    lastClientSequences: state.lastClientSequences,
     processedCommandIds: [...state.processedCommandIds].sort(),
   });
   let hash = 2166136261;
