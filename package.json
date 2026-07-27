@@ -1,0 +1,29 @@
+{
+  "name": "shared-convoy-authority-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local two-client prototype for authoritative convoy state and network recovery evidence.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
+    "server": "tsx src/server.ts",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:server": "vitest run tests/server.test.ts",
+    "test:browser": "playwright test",
+    "check": "node scripts/check_repo.mjs"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "playwright": "^1.52.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^3.0.5"
+  }
+}
