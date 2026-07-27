@@ -7,7 +7,7 @@ if (!app) {
 const title = document.createElement("h1");
 title.textContent = "Shared Convoy Authority Lab";
 
-const status = document.createElement("p");
-status.textContent = "Prototype shell ready. Authoritative simulation is next.";
+const statusLine = document.createElement("p");
+statusLine.textContent = "Prototype shell ready. Authoritative simulation is next.";
 
-app.replaceChildren(title, status);
+app.replaceChildren(title, statusLine);

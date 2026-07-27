@@ -30,6 +30,7 @@ describe("authoritative command application", () => {
 
   it("moves only through a lead command and advances tick and snapshot", () => {
     const result = applyCommand(room(), {
+      type: "command",
       commandId: "lead-1",
       clientSequence: 1,
       role: "lead",
@@ -45,6 +46,7 @@ describe("authoritative command application", () => {
   it("rejects an escort command sent by the lead role without changing state", () => {
     const initial = room();
     const result = applyCommand(initial, {
+      type: "command",
       commandId: "wrong-role",
       clientSequence: 1,
       role: "lead",
@@ -58,12 +60,14 @@ describe("authoritative command application", () => {
 
   it("is idempotent for duplicate command IDs", () => {
     const first = applyCommand(room(), {
+      type: "command",
       commandId: "cargo-1",
       clientSequence: 1,
       role: "escort",
       action: { type: "transfer", units: 10 },
     });
     const duplicate = applyCommand(first.state, {
+      type: "command",
       commandId: "cargo-1",
       clientSequence: 2,
       role: "escort",
