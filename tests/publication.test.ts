@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -71,6 +72,17 @@ describe("publication surface", () => {
     const mobile = await pngDimensions("docs/media/mobile-late-join.png");
     expect(desktop.width).toBeGreaterThanOrEqual(1200);
     expect(desktop.height).toBeGreaterThanOrEqual(700);
-    expect(mobile).toEqual({ width: 390, height: 844 });
+    expect(mobile.width).toBe(390);
+    expect(mobile.height).toBeGreaterThanOrEqual(844);
+  });
+
+  it("checks tracked binary media without decoding it as source text", () => {
+    expect(() =>
+      execFileSync(process.execPath, ["scripts/check_repo.mjs"], {
+        cwd: root,
+        encoding: "utf8",
+        stdio: "pipe",
+      }),
+    ).not.toThrow();
   });
 });

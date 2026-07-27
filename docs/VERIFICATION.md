@@ -15,6 +15,10 @@ Last verified: 2026-07-28
 | Repository hygiene | PASS | `npm run check` |
 | Browser acceptance | PASS: 1 scenario | `npm run test:browser` |
 
+## Continuous integration
+
+The tracked GitHub Actions workflow is configured for Node.js 22 on `ubuntu-latest` with read-only repository permissions. It installs dependencies with `npm ci`, runs hygiene, unit/integration, and production-build checks, installs Chromium, and starts fresh local services for the same browser acceptance scenario. No public CI run is claimed before a remote repository exists.
+
 ## Browser scenario
 
 Playwright starts one local server and Vite, then opens independent Lead and Escort browser contexts in one room. It verifies:
@@ -37,10 +41,12 @@ The run writes ignored local evidence to `evidence/browser/`:
 - `mobile-late-join.png`
 - `convoy-browser-receipt.json`
 
+The tracked files in `docs/media/` are curated copies from this Playwright scenario. They make the real playfield inspectable in a clean checkout, while the ignored receipt and executable assertions remain the authoritative behavioral evidence.
+
 ## Reproduce
 
 ```bash
-npm install
+npm ci
 npm test
 npm run test:server
 npm run build

@@ -4,6 +4,10 @@
 
 Lead は船団を前進させ、Escort は索敵と貨物移送を担当します。クライアントは command だけを提案し、位置・貨物・進行度・報酬を確定できるのは Node.js WebSocket サーバーだけです。
 
+![Lead と Escort が共有する server-confirmed route](docs/media/desktop-convoy.png)
+
+*独立した Lead / Escort ブラウザが同じ server-confirmed state を描画し、下部の receipt で tick、snapshot、RTT、recovery、state hash を確認できます。*
+
 ## 検証する仮説
 
 - 役割別 command をサーバー側で検証できる
@@ -15,8 +19,10 @@ Lead は船団を前進させ、Escort は索敵と貨物移送を担当しま�
 
 ## ローカル起動
 
+検証済みの実行環境は Node.js 22 / npm 10 です。
+
 ```bash
-npm install
+npm ci
 npm run server
 ```
 
@@ -44,7 +50,7 @@ npm run dev
 | Recovery | private reconnect token、lease、full snapshot reconciliation |
 | Fault injection | seeded latency / jitter / drop / duplicate / real pair reordering |
 | Visualization | Phaser 3 route renderer + DOM observability HUD |
-| Evidence | Vitest integration tests + two-context Playwright scenario |
+| Evidence | Vitest integration tests + multi-context Playwright scenario |
 
 詳細は [Architecture](docs/ARCHITECTURE.md)、[Networking](docs/NETWORKING.md)、[Verification](docs/VERIFICATION.md) を参照してください。
 

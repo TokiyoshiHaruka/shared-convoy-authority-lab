@@ -27,7 +27,14 @@ for (const path of files) {
   }
   if (/\.(?:key|p12|pem|pfx)$/i.test(name)) failures.push(`tracked-key-material:${path}`);
   if ((await stat(join(root, path))).size > 1_000_000) continue;
-  const text = await readFile(join(root, path), "utf8");
+  const content = await readFile(join(root, path));
+  if (content.includes(0)) continue;
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    continue;
+  }
   scanned += 1;
   for (const pattern of secretPatterns) if (pattern.test(text)) failures.push(`possible-secret:${path}`);
   if (path !== "scripts/check_repo.mjs" && absoluteLocalPath.test(text)) failures.push(`absolute-local-path:${path}`);

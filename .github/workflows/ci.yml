@@ -1,0 +1,42 @@
+name: Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install dependencies
+        run: npm ci
+      - name: Check repository hygiene
+        run: npm run check
+      - name: Run unit and integration tests
+        run: npm test
+      - name: Build production bundle
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser acceptance
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v5
+        if: ${{ !cancelled() }}
+        with:
+          name: browser-evidence
+          path: |
+            evidence/browser/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
