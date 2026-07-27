@@ -1,6 +1,14 @@
 import { encodeMessage, type ClientCommand, type CommandAction, type Role } from "./protocol";
 import type { RoomState } from "./simulation";
-import { DEFAULT_FAULT_PROFILE, clampFaultProfile, createTransportMetrics, type FaultProfile, type TransportMetrics } from "./transport";
+import {
+  DEFAULT_FAULT_PROFILE,
+  clampFaultProfile,
+  createFaultTransport,
+  createTransportMetrics,
+  type FaultProfile,
+  type FaultTransport,
+  type TransportMetrics,
+} from "./transport";
 
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "reconnecting" | "offline";
 
@@ -84,7 +92,9 @@ export class ConvoyClient {
   private reconnectTimer: number | null = null;
   private autoReconnect = true;
   private lastAppliedSnapshotSequence = -1;
-  private randomState = 0x4f1bbcdc;
+  private incomingMessageSequence = 0;
+  private readonly outgoingTransport: FaultTransport;
+  private readonly incomingTransport: FaultTransport;
   private metrics: ClientMetrics;
 
   public constructor(options: ConvoyClientOptions) {
@@ -107,6 +117,23 @@ export class ConvoyClient {
       faultProfile: clampFaultProfile(options.faultProfile ?? DEFAULT_FAULT_PROFILE),
       transport: createTransportMetrics(),
     };
+    this.outgoingTransport = createFaultTransport({
+      seed: 0x4f1bbcdc,
+      profile: this.metrics.faultProfile,
+      deliver: (message) => {
+        if (typeof message.payload !== "string" || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+        this.socket.send(message.payload);
+        return true;
+      },
+    });
+    this.incomingTransport = createFaultTransport({
+      seed: 0x7b13d24a,
+      profile: this.metrics.faultProfile,
+      deliver: (message) => {
+        this.handleRawMessage(message.payload);
+        return true;
+      },
+    });
   }
 
   public getMetrics(): ClientMetrics {
@@ -152,7 +179,7 @@ export class ConvoyClient {
       this.setStatus("connected");
     });
     socket.addEventListener("message", (event) => {
-      this.deliverWithFault(event.data);
+      void this.receiveWithFault(event.data);
     });
     socket.addEventListener("error", () => undefined);
     socket.addEventListener("close", () => {
@@ -189,6 +216,8 @@ export class ConvoyClient {
 
   public setFaultProfile(profile: Partial<FaultProfile>): void {
     this.metrics.faultProfile = clampFaultProfile({ ...this.metrics.faultProfile, ...profile });
+    this.outgoingTransport.setProfile(this.metrics.faultProfile);
+    this.incomingTransport.setProfile(this.metrics.faultProfile);
     this.emitMetrics();
   }
 
@@ -205,61 +234,21 @@ export class ConvoyClient {
     };
     this.lastCommand = command;
     this.pending.set(command.commandId, { sentAt: Date.now(), action });
-    this.metrics.transport.sent += 1;
     this.emitMetrics();
-    this.sendWithFault(command);
+    void this.outgoingTransport.send({ id: command.commandId, payload: encodeMessage(command) }).then(() => this.emitMetrics());
     return command.commandId;
   }
 
   public resendLastCommand(): string | null {
     if (!this.lastCommand || !this.socket || this.socket.readyState !== WebSocket.OPEN) return null;
-    this.metrics.transport.sent += 1;
-    this.sendWithFault(this.lastCommand);
+    void this.outgoingTransport.send({ id: this.lastCommand.commandId, payload: encodeMessage(this.lastCommand) }).then(() => this.emitMetrics());
     return this.lastCommand.commandId;
   }
 
-  private sendWithFault(command: ClientCommand): void {
-    const profile = this.metrics.faultProfile;
-    if (this.nextRandom() < profile.dropRate) {
-      this.metrics.transport.dropped += 1;
-      this.emitMetrics();
-      return;
-    }
-    const payload = encodeMessage(command);
-    const delay = this.faultDelay(profile);
-    window.setTimeout(() => {
-      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
-      this.socket.send(payload);
-      this.metrics.transport.delivered += 1;
-      this.emitMetrics();
-    }, delay);
-    if (this.nextRandom() < profile.duplicateRate) {
-      this.metrics.transport.duplicated += 1;
-      window.setTimeout(() => {
-        if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(payload);
-      }, delay + Math.max(8, profile.jitterMs));
-    }
-  }
-
-  private deliverWithFault(raw: unknown): void {
-    const profile = this.metrics.faultProfile;
-    if (this.nextRandom() < profile.dropRate) {
-      this.metrics.transport.dropped += 1;
-      this.emitMetrics();
-      return;
-    }
-    let payload = raw;
-    if (payload instanceof Blob) {
-      void payload.text().then((text) => this.deliverWithFault(text));
-      return;
-    }
-    const delay = this.faultDelay(profile) + (this.nextRandom() < profile.reorderRate ? profile.latencyMs : 0);
-    if (delay > profile.latencyMs) this.metrics.transport.reordered += 1;
-    window.setTimeout(() => this.handleRawMessage(payload), delay);
-    if (this.nextRandom() < profile.duplicateRate) {
-      this.metrics.transport.duplicated += 1;
-      window.setTimeout(() => this.handleRawMessage(payload), delay + Math.max(8, profile.jitterMs));
-    }
+  private async receiveWithFault(raw: unknown): Promise<void> {
+    const payload = raw instanceof Blob ? await raw.text() : raw;
+    await this.incomingTransport.send({ id: `server-${++this.incomingMessageSequence}`, payload });
+    this.emitMetrics();
   }
 
   private handleRawMessage(raw: unknown): void {
@@ -293,7 +282,8 @@ export class ConvoyClient {
   }
 
   private applySnapshot(snapshot: SnapshotMessage): void {
-    for (const commandId of snapshot.ackedCommandIds) {
+    const acknowledged = new Set([...snapshot.ackedCommandIds, ...snapshot.state.processedCommandIds]);
+    for (const commandId of acknowledged) {
       const pending = this.pending.get(commandId);
       if (pending) {
         this.metrics.roundTripMs = Date.now() - pending.sentAt;
@@ -309,6 +299,9 @@ export class ConvoyClient {
     this.metrics.serverTick = snapshot.serverTick;
     this.metrics.snapshotSequence = snapshot.snapshotSequence;
     this.metrics.stateHash = snapshot.stateHash;
+    if (this.metrics.assignedRole && this.metrics.assignedRole !== "observer") {
+      this.sequence = Math.max(this.sequence, snapshot.state.lastClientSequences[this.metrics.assignedRole]);
+    }
     if (this.reconnectStartedAt !== null) {
       this.metrics.recoveryMs = Date.now() - this.reconnectStartedAt;
       this.reconnectStartedAt = null;
@@ -323,6 +316,16 @@ export class ConvoyClient {
   }
 
   private emitMetrics(): void {
+    const outbound = this.outgoingTransport.metrics;
+    const inbound = this.incomingTransport.metrics;
+    this.metrics.transport = {
+      sent: outbound.sent,
+      received: inbound.sent,
+      delivered: outbound.delivered + inbound.delivered,
+      dropped: outbound.dropped + inbound.dropped,
+      duplicated: outbound.duplicated + inbound.duplicated,
+      reordered: outbound.reordered + inbound.reordered,
+    };
     this.metrics.pendingCommands = this.pending.size;
     this.options.onMetrics?.(this.getMetrics());
   }
@@ -341,13 +344,4 @@ export class ConvoyClient {
     this.reconnectTimer = null;
   }
 
-  private nextRandom(): number {
-    this.randomState = Math.imul(this.randomState, 1664525) + 1013904223;
-    return (this.randomState >>> 0) / 0x100000000;
-  }
-
-  private faultDelay(profile: FaultProfile): number {
-    const spread = profile.jitterMs > 0 ? (this.nextRandom() * 2 - 1) * profile.jitterMs : 0;
-    return Math.max(0, Math.round(profile.latencyMs + spread));
-  }
 }

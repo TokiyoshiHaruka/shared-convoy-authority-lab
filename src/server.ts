@@ -67,28 +67,27 @@ function broadcastSnapshot(room: Room, ackedCommandIds: string[] = []): void {
   });
 }
 
-function purgeExpiredTokens(room: Room): void {
-  const now = Date.now();
+function purgeExpiredTokens(room: Room, now: number): void {
   for (const [token, session] of room.tokens) {
     if (session.expiresAt !== null && session.expiresAt <= now) room.tokens.delete(token);
   }
 }
 
-function assignRole(room: Room, role: Role | "observer", requestedToken?: string): { role: Role | "observer"; token: string } {
-  purgeExpiredTokens(room);
+function assignRole(room: Room, role: Role | "observer", now: number, requestedToken?: string): { role: Role | "observer"; token: string; newLease: boolean } {
+  purgeExpiredTokens(room, now);
   if (requestedToken) {
     const session = room.tokens.get(requestedToken);
     if (session) {
       session.expiresAt = null;
-      return { role: session.role, token: requestedToken };
+      return { role: session.role, token: requestedToken, newLease: false };
     }
   }
-  if (role === "observer") return { role, token: randomUUID() };
+  if (role === "observer") return { role, token: randomUUID(), newLease: false };
   const reserved = [...room.tokens.values()].some((session) => session.role === role);
-  if (reserved) return { role: "observer", token: randomUUID() };
+  if (reserved) return { role: "observer", token: randomUUID(), newLease: false };
   const token = randomUUID();
   room.tokens.set(token, { role, expiresAt: null });
-  return { role, token };
+  return { role, token, newLease: true };
 }
 
 function safeCommandId(raw: string): string {
@@ -127,7 +126,9 @@ function handleMessage(room: Room, connection: Connection, raw: RawData): void {
   broadcastSnapshot(room, [command.commandId]);
 }
 
-export async function createServerHarness(options: { port: number }): Promise<ServerHarness> {
+export async function createServerHarness(options: { port: number; now?: () => number; reconnectGraceMs?: number }): Promise<ServerHarness> {
+  const now = options.now ?? Date.now;
+  const reconnectGraceMs = options.reconnectGraceMs ?? RECONNECT_GRACE_MS;
   const http: HttpServer = createServer((_, response) => {
     response.writeHead(404).end();
   });
@@ -141,7 +142,7 @@ export async function createServerHarness(options: { port: number }): Promise<Se
     const requestedToken = url.searchParams.get("token") ?? undefined;
     const room: Room = rooms.get(roomId) ?? { state: createRoom(roomId), connections: new Map(), tokens: new Map() };
     rooms.set(roomId, room);
-    const assigned = assignRole(room, requestedRole, requestedToken);
+    const assigned = assignRole(room, requestedRole, now(), requestedToken);
     const connection: Connection = { socket, token: assigned.token, role: assigned.role, roomId };
     const previous = room.connections.get(assigned.token);
     if (previous && previous.socket !== socket) previous.socket.close(4001, "session-replaced");
@@ -150,7 +151,7 @@ export async function createServerHarness(options: { port: number }): Promise<Se
     if (assigned.role === "observer") {
       sendSnapshot(room, connection);
     } else {
-      const nextState = setRoleConnected(room.state, assigned.role, true);
+      const nextState = setRoleConnected(room.state, assigned.role, true, assigned.newLease);
       if (nextState === room.state) sendSnapshot(room, connection);
       else {
         room.state = nextState;
@@ -163,7 +164,7 @@ export async function createServerHarness(options: { port: number }): Promise<Se
       room.connections.delete(assigned.token);
       if (assigned.role === "observer") return;
       const session = room.tokens.get(assigned.token);
-      if (session) session.expiresAt = Date.now() + RECONNECT_GRACE_MS;
+      if (session) session.expiresAt = now() + reconnectGraceMs;
       const nextState = setRoleConnected(room.state, assigned.role, false);
       if (nextState !== room.state) {
         room.state = nextState;

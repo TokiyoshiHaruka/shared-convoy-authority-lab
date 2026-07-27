@@ -48,13 +48,15 @@ export function createRoom(roomId: string): RoomState {
   };
 }
 
-export function setRoleConnected(state: RoomState, role: Role, connected: boolean): RoomState {
-  if (state.connectedRoles[role] === connected) return state;
+export function setRoleConnected(state: RoomState, role: Role, connected: boolean, resetSequence = false): RoomState {
+  const nextSequence = resetSequence ? 0 : state.lastClientSequences[role];
+  if (state.connectedRoles[role] === connected && state.lastClientSequences[role] === nextSequence) return state;
   return {
     ...state,
     serverTick: state.serverTick + 1,
     snapshotSequence: state.snapshotSequence + 1,
     connectedRoles: { ...state.connectedRoles, [role]: connected },
+    lastClientSequences: { ...state.lastClientSequences, [role]: nextSequence },
   };
 }
 

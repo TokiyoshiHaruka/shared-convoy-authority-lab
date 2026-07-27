@@ -7,7 +7,7 @@ describe("deterministic fault transport", () => {
     const transport = createFaultTransport({
       seed: 7,
       profile: { latencyMs: 0, jitterMs: 0, dropRate: 0, duplicateRate: 1, reorderRate: 0 },
-      deliver: (message) => delivered.push(message),
+      deliver: (message) => { delivered.push(message); },
     });
     await transport.send({ id: "m-1", payload: "snapshot" });
     expect(delivered.map((message) => message.id)).toEqual(["m-1", "m-1"]);
@@ -20,7 +20,7 @@ describe("deterministic fault transport", () => {
     const transport = createFaultTransport({
       seed: 1,
       profile: { latencyMs: 0, jitterMs: 0, dropRate: 1, duplicateRate: 0, reorderRate: 0 },
-      deliver: (message) => delivered.push(message),
+      deliver: (message) => { delivered.push(message); },
     });
     await transport.send({ id: "m-2", payload: "snapshot" });
     expect(delivered).toEqual([]);
@@ -32,7 +32,7 @@ describe("deterministic fault transport", () => {
     const transport = createFaultTransport({
       seed: 11,
       profile: { latencyMs: 0, jitterMs: 0, dropRate: 0, duplicateRate: 0, reorderRate: 1 },
-      deliver: (message) => delivered.push(message),
+      deliver: (message) => { delivered.push(message); },
     });
     const first = transport.send({ id: "m-1", payload: "first" });
     const second = transport.send({ id: "m-2", payload: "second" });

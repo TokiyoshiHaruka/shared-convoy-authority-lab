@@ -72,4 +72,19 @@ describe("authoritative convoy server", () => {
     expect(lead.messages.some((message) => message.type === "reject" && message.commandId === "bad-action" && message.reason === "invalid-command")).toBe(true);
     await harness.close();
   });
+
+  it("resets the role sequence after an expired reconnect lease", async () => {
+    let clock = 1_000;
+    harness = await createServerHarness({ port: 0, now: () => clock, reconnectGraceMs: 10 });
+    const first = await harness.connectClient("room-golf", "lead");
+    await first.send({ type: "command", commandId: "lease-old", clientSequence: 1, role: "lead", action: { type: "move", distance: 1 } });
+    await first.close();
+    clock += 11;
+
+    const next = await harness.connectClient("room-golf", "lead");
+    await next.send({ type: "command", commandId: "lease-new", clientSequence: 1, role: "lead", action: { type: "move", distance: 1 } });
+    expect(harness.getRoom("room-golf").convoy.position).toBe(2);
+    expect(harness.getRoom("room-golf").lastClientSequences.lead).toBe(1);
+    await harness.close();
+  });
 });

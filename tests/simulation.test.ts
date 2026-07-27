@@ -101,4 +101,13 @@ describe("authoritative command application", () => {
     expect(connected.serverTick).toBe(1);
     expect(connected.snapshotSequence).toBe(1);
   });
+
+  it("resets a role sequence when a new session lease is issued", () => {
+    const progressed = applyCommand(createRoom("room-alpha"), {
+      type: "command", commandId: "lead-9", clientSequence: 9, role: "lead", action: { type: "move", distance: 1 },
+    }).state;
+    const leased = setRoleConnected(progressed, "lead", true, true);
+    expect(leased.lastClientSequences.lead).toBe(0);
+    expect(leased.connectedRoles.lead).toBe(true);
+  });
 });

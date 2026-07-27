@@ -8,6 +8,7 @@ export interface FaultProfile {
 
 export interface TransportMetrics {
   sent: number;
+  received: number;
   delivered: number;
   dropped: number;
   duplicated: number;
@@ -22,6 +23,7 @@ export interface TransportMessage {
 export interface FaultTransport {
   metrics: TransportMetrics;
   send(message: TransportMessage): Promise<void>;
+  setProfile(profile: Partial<FaultProfile>): void;
 }
 
 export const DEFAULT_FAULT_PROFILE: FaultProfile = {
@@ -33,7 +35,7 @@ export const DEFAULT_FAULT_PROFILE: FaultProfile = {
 };
 
 export function createTransportMetrics(): TransportMetrics {
-  return { sent: 0, delivered: 0, dropped: 0, duplicated: 0, reordered: 0 };
+  return { sent: 0, received: 0, delivered: 0, dropped: 0, duplicated: 0, reordered: 0 };
 }
 
 export function clampFaultProfile(profile: Partial<FaultProfile>): FaultProfile {
@@ -58,16 +60,17 @@ function createRng(seed: number): () => number {
 export function createFaultTransport(options: {
   seed: number;
   profile?: Partial<FaultProfile>;
-  deliver: (message: TransportMessage) => void;
+  metrics?: TransportMetrics;
+  deliver: (message: TransportMessage) => boolean | void;
 }): FaultTransport {
-  const profile = clampFaultProfile(options.profile ?? DEFAULT_FAULT_PROFILE);
-  const metrics = createTransportMetrics();
+  let profile = clampFaultProfile(options.profile ?? DEFAULT_FAULT_PROFILE);
+  const metrics = options.metrics ?? createTransportMetrics();
   const random = createRng(options.seed);
   const delay = (message: TransportMessage): Promise<void> => new Promise((resolve) => {
     const jitter = profile.jitterMs === 0 ? 0 : Math.round((random() * 2 - 1) * profile.jitterMs);
     setTimeout(() => {
-      options.deliver(message);
-      metrics.delivered += 1;
+      if (options.deliver(message) === false) metrics.dropped += 1;
+      else metrics.delivered += 1;
       resolve();
     }, Math.max(0, profile.latencyMs + jitter));
   });
@@ -77,6 +80,9 @@ export function createFaultTransport(options: {
   let held: { message: TransportMessage; copies: number; resolve: () => void; timer: ReturnType<typeof setTimeout> } | null = null;
   return {
     metrics,
+    setProfile(nextProfile) {
+      profile = clampFaultProfile({ ...profile, ...nextProfile });
+    },
     send(message) {
       metrics.sent += 1;
       if (random() < profile.dropRate) {
