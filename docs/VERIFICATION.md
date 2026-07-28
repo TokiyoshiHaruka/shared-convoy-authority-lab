@@ -1,6 +1,6 @@
 # Verification
 
-Last verified: 2026-07-28
+Last verified: 2026-07-29
 
 ## Acceptance matrix
 
@@ -9,15 +9,15 @@ Last verified: 2026-07-28
 | Protocol and simulation | PASS | role rules, safe sequence, idempotency, stable full-state hash |
 | Server integration | PASS | join, late join, correlated reject, reconnect, token isolation, lease expiry |
 | Fault transport | PASS | drop, duplicate, actual adjacent reorder |
-| Unit/integration suite | PASS: 20 tests | `npm test` |
-| Server suite | PASS: 7 tests | `npm run test:server` |
+| Unit/integration suite | PASS: 29 tests (7 server-focused tests) | `npm test` |
+| Server suite | PASS: 7 focused tests (subset of 29) | `npm run test:server` |
 | TypeScript and production build | PASS | `npm run build` |
 | Repository hygiene | PASS | `npm run check` |
 | Browser acceptance | PASS: 1 scenario | `npm run test:browser` |
 
 ## Continuous integration
 
-The tracked GitHub Actions workflow is configured for Node.js 22 on `ubuntu-latest` with read-only repository permissions. It installs dependencies with `npm ci`, runs hygiene, unit/integration, and production-build checks, installs Chromium, and starts fresh local services for the same browser acceptance scenario. No public CI run is claimed before a remote repository exists.
+The public `Verification` workflow runs on pushes to `main` and pull requests targeting `main`, with Node.js 22 on `ubuntu-latest` and read-only repository permissions. It installs dependencies with `npm ci`, runs hygiene, the unit/integration suite, and production-build checks, installs Chromium, and starts fresh local services for the browser acceptance scenario. The v0.1.0 release commit completed its then-current matrix successfully; later changes must earn their own exact-head run.
 
 ## Browser scenario
 
