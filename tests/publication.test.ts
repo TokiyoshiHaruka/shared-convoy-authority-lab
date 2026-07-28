@@ -45,6 +45,17 @@ describe("publication surface", () => {
     }
   });
 
+  it("records the current public release state in the documentation", async () => {
+    const verification = await text("docs/VERIFICATION.md");
+    expect(verification).toContain("PASS: 29 tests (7 server-focused tests)");
+    expect(verification).toContain("The public `Verification` workflow");
+    expect(verification).not.toContain("No public CI run is claimed");
+
+    const aiUsage = await text("AI_USAGE.md");
+    expect(aiUsage).toContain("The v0.1.0 public release was made");
+    expect(aiUsage).not.toContain("A public release still requires");
+  });
+
   it("runs the complete verification matrix in a read-only GitHub Actions job", async () => {
     const workflow = await text(".github/workflows/ci.yml");
     for (const fragment of [
