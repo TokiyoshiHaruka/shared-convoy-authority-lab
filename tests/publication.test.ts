@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -48,8 +50,6 @@ describe("publication surface", () => {
     for (const fragment of [
       "permissions:",
       "contents: read",
-      "actions/checkout@v6",
-      "actions/setup-node@v6",
       "node-version: 22",
       "npm ci",
       "npm run check",
@@ -60,6 +60,41 @@ describe("publication surface", () => {
     ]) {
       expect(workflow).toContain(fragment);
     }
+  });
+
+  it("pins every official GitHub Action to an auditable release commit", async () => {
+    const workflow = await text(".github/workflows/ci.yml");
+    const officialActionLines = workflow
+      .split(/\r?\n/)
+      .filter((line) => /^\s*-\s+uses:\s+actions\//.test(line));
+    expect(officialActionLines.length).toBeGreaterThan(0);
+    for (const line of officialActionLines) {
+      expect(line).toMatch(
+        /^\s*-\s+uses:\s+actions\/[^\s@]+@[0-9a-f]{40}\s+#\s+v\d+\.\d+\.\d+\s*$/,
+      );
+    }
+    for (const action of [
+      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+      "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+    ]) {
+      expect(workflow).toContain(action);
+    }
+  });
+
+  it("schedules monthly Dependabot checks for GitHub Actions", async () => {
+    const configPath = ".github/dependabot.yml";
+    expect(existsSync(resolve(root, configPath))).toBe(true);
+    expect(parse(await text(configPath))).toEqual({
+      version: 2,
+      updates: [
+        {
+          "package-ecosystem": "github-actions",
+          directory: "/",
+          schedule: { interval: "monthly" },
+        },
+      ],
+    });
   });
 
   it("pins the supported Node.js major used by clean checkout and CI", async () => {
