@@ -9,8 +9,8 @@ Last verified: 2026-07-29
 | Protocol and simulation | PASS | role rules, safe sequence, idempotency, stable full-state hash |
 | Server integration | PASS | join, late join, correlated reject, reconnect, token isolation, lease expiry |
 | Fault transport | PASS | drop, duplicate, actual adjacent reorder |
-| Unit/integration suite | PASS: 29 tests (7 server-focused tests) | `npm test` |
-| Server suite | PASS: 7 focused tests (subset of 29) | `npm run test:server` |
+| Unit/integration suite | PASS: 30 tests (7 server-focused tests) | `npm test` |
+| Server suite | PASS: 7 focused tests (subset of 30) | `npm run test:server` |
 | TypeScript and production build | PASS | `npm run build` |
 | Repository hygiene | PASS | `npm run check` |
 | Browser acceptance | PASS: 1 scenario | `npm run test:browser` |
