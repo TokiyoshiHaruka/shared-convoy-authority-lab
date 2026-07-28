@@ -45,9 +45,17 @@ describe("publication surface", () => {
     }
   });
 
+  it("keeps public project language free of portfolio framing", async () => {
+    const aiUsage = (await text("AI_USAGE.md")).toLowerCase();
+    const notice = (await text("NOTICE.md")).toLowerCase();
+    expect(aiUsage).not.toContain("portfolio");
+    expect(aiUsage).not.toContain("interview");
+    expect(notice).not.toContain("portfolio");
+  });
+
   it("records the current public release state in the documentation", async () => {
     const verification = await text("docs/VERIFICATION.md");
-    expect(verification).toContain("PASS: 29 tests (7 server-focused tests)");
+    expect(verification).toContain("PASS: 30 tests (7 server-focused tests)");
     expect(verification).toContain("The public `Verification` workflow");
     expect(verification).not.toContain("No public CI run is claimed");
 

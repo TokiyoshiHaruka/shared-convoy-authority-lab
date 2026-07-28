@@ -28,6 +28,6 @@ The browser scenario verifies semantic game state, a nonblank WebGL frame, deter
 
 ## Responsibility boundary
 
-The repository owner defined the portfolio direction, target role, gameplay interests, and publication constraints. The owner remains responsible for the public scope, source review, security boundary, licensing, and final interview claims. The v0.1.0 public release was made after the repository publication gate and GitHub authentication were satisfied. Future changes remain subject to the same verification, security, licensing, and claim-review responsibilities.
+The repository owner defined the prototype direction, gameplay interests, and publication constraints. The owner remains responsible for the public scope, source review, security boundary, licensing, and factual project claims. The v0.1.0 public release was made after the repository publication gate and GitHub authentication were satisfied. Future changes remain subject to the same verification, security, licensing, and claim-review responsibilities.
 
 No credentials, private service data, proprietary game content, or third-party game assets were supplied to OpenAI Codex for this project.
